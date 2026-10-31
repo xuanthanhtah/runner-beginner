@@ -49,29 +49,32 @@ class ControlBar extends StatelessWidget {
         );
 
     Widget stop() => OutlinedButton.icon(
-          style: secondary,
-          onPressed: onStop,
-          icon: const Icon(Icons.stop_rounded, size: 32),
-          label: const Text('STOP'),
-        );
+      style: secondary,
+      onPressed: onStop,
+      icon: const Icon(Icons.stop_rounded, size: 32),
+      label: const Text('STOP'),
+    );
 
     return switch (status) {
-      WorkoutStatus.idle =>
-        main('START', Icons.play_arrow_rounded, onStart),
-      WorkoutStatus.completed =>
-        main('AGAIN', Icons.replay_rounded, onStart),
-      WorkoutStatus.running => Row(children: [
+      WorkoutStatus.idle => main('START', Icons.play_arrow_rounded, onStart),
+      WorkoutStatus.completed => main('AGAIN', Icons.replay_rounded, onStart),
+      WorkoutStatus.running => Row(
+        children: [
           Expanded(flex: 3, child: main('PAUSE', Icons.pause_rounded, onPause)),
           const SizedBox(width: 12),
           Expanded(flex: 2, child: stop()),
-        ]),
-      WorkoutStatus.paused => Row(children: [
+        ],
+      ),
+      WorkoutStatus.paused => Row(
+        children: [
           Expanded(
-              flex: 3,
-              child: main('RESUME', Icons.play_arrow_rounded, onResume)),
+            flex: 3,
+            child: main('RESUME', Icons.play_arrow_rounded, onResume),
+          ),
           const SizedBox(width: 12),
           Expanded(flex: 2, child: stop()),
-        ]),
+        ],
+      ),
     };
   }
 }

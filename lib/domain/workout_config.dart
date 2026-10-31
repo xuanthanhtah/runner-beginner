@@ -1,7 +1,10 @@
+import 'interval_phase.dart';
+
 /// User-configurable workout settings.
 ///
-/// One round is a RUN interval followed by a WALK interval. A null [rounds]
-/// means infinite mode: the workout repeats until stopped manually.
+/// One round is a RUN interval followed by a WALK interval, or the reverse
+/// when [startWithWalk] is set. A null [rounds] means infinite mode: the
+/// workout repeats until stopped manually.
 class WorkoutConfig {
   const WorkoutConfig({
     required this.runDuration,
@@ -10,6 +13,7 @@ class WorkoutConfig {
     this.soundEnabled = true,
     this.vibrationEnabled = true,
     this.keepScreenOn = true,
+    this.startWithWalk = false,
   });
 
   static const minIntervalDuration = Duration(seconds: 5);
@@ -29,6 +33,16 @@ class WorkoutConfig {
   final bool soundEnabled;
   final bool vibrationEnabled;
   final bool keepScreenOn;
+  final bool startWithWalk;
+
+  IntervalPhase get firstPhase =>
+      startWithWalk ? IntervalPhase.walk : IntervalPhase.run;
+
+  IntervalPhase get secondPhase =>
+      startWithWalk ? IntervalPhase.run : IntervalPhase.walk;
+
+  Duration durationOf(IntervalPhase phase) =>
+      phase == IntervalPhase.run ? runDuration : walkDuration;
 
   bool get isInfinite => rounds == null;
 
@@ -45,6 +59,7 @@ class WorkoutConfig {
     bool? soundEnabled,
     bool? vibrationEnabled,
     bool? keepScreenOn,
+    bool? startWithWalk,
   }) {
     return WorkoutConfig(
       runDuration: clampInterval(runDuration ?? this.runDuration),
@@ -53,26 +68,26 @@ class WorkoutConfig {
       soundEnabled: soundEnabled ?? this.soundEnabled,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+      startWithWalk: startWithWalk ?? this.startWithWalk,
     );
   }
 
   Map<String, Object?> toJson() => {
-        'runSeconds': runDuration.inSeconds,
-        'walkSeconds': walkDuration.inSeconds,
-        'rounds': rounds,
-        'soundEnabled': soundEnabled,
-        'vibrationEnabled': vibrationEnabled,
-        'keepScreenOn': keepScreenOn,
-      };
+    'runSeconds': runDuration.inSeconds,
+    'walkSeconds': walkDuration.inSeconds,
+    'rounds': rounds,
+    'soundEnabled': soundEnabled,
+    'vibrationEnabled': vibrationEnabled,
+    'keepScreenOn': keepScreenOn,
+    'startWithWalk': startWithWalk,
+  };
 
   /// Parses persisted settings, clamping out-of-range values and falling back
   /// to [defaults] for anything missing or malformed.
   factory WorkoutConfig.fromJson(Map<String, Object?> json) {
     Duration seconds(String key, Duration fallback) {
       final value = json[key];
-      return value is int
-          ? clampInterval(Duration(seconds: value))
-          : fallback;
+      return value is int ? clampInterval(Duration(seconds: value)) : fallback;
     }
 
     bool flag(String key, bool fallback) {
@@ -95,6 +110,7 @@ class WorkoutConfig {
       soundEnabled: flag('soundEnabled', defaults.soundEnabled),
       vibrationEnabled: flag('vibrationEnabled', defaults.vibrationEnabled),
       keepScreenOn: flag('keepScreenOn', defaults.keepScreenOn),
+      startWithWalk: flag('startWithWalk', defaults.startWithWalk),
     );
   }
 
@@ -104,8 +120,7 @@ class WorkoutConfig {
     return d;
   }
 
-  static int? _clampRounds(int? r) =>
-      r?.clamp(minRounds, maxRounds);
+  static int? _clampRounds(int? r) => r?.clamp(minRounds, maxRounds);
 
   @override
   bool operator ==(Object other) =>
@@ -115,11 +130,19 @@ class WorkoutConfig {
       other.rounds == rounds &&
       other.soundEnabled == soundEnabled &&
       other.vibrationEnabled == vibrationEnabled &&
-      other.keepScreenOn == keepScreenOn;
+      other.keepScreenOn == keepScreenOn &&
+      other.startWithWalk == startWithWalk;
 
   @override
-  int get hashCode => Object.hash(runDuration, walkDuration, rounds,
-      soundEnabled, vibrationEnabled, keepScreenOn);
+  int get hashCode => Object.hash(
+    runDuration,
+    walkDuration,
+    rounds,
+    soundEnabled,
+    vibrationEnabled,
+    keepScreenOn,
+    startWithWalk,
+  );
 
   @override
   String toString() =>

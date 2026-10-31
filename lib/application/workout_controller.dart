@@ -6,7 +6,6 @@ import '../domain/interval_engine.dart';
 import '../domain/workout_config.dart';
 import '../domain/workout_event.dart';
 import '../services/haptic_service.dart';
-import '../services/notification_scheduler.dart';
 import '../services/sound_service.dart';
 import 'providers.dart';
 
@@ -73,10 +72,10 @@ class WorkoutController extends Notifier<WorkoutState> {
 
     _startTicker();
     unawaited(ref.read(backgroundKeeperProvider).start(state.snapshot));
+    _showLiveActivity();
     if (state.config.keepScreenOn) {
       unawaited(ref.read(wakeLockServiceProvider).enable());
     }
-    _scheduleNotifications();
   }
 
   void pause() {
@@ -86,8 +85,8 @@ class WorkoutController extends Notifier<WorkoutState> {
     _accumulated = _elapsed();
     _runningSince = null;
     _stopTicker();
-    unawaited(ref.read(notificationSchedulerProvider).cancelAll());
     state = state.copyWith(status: WorkoutStatus.paused);
+    _showLiveActivity();
   }
 
   void resume() {
@@ -95,7 +94,7 @@ class WorkoutController extends Notifier<WorkoutState> {
     _runningSince = ref.read(clockProvider).monotonic;
     state = state.copyWith(status: WorkoutStatus.running);
     _startTicker();
-    _scheduleNotifications();
+    _showLiveActivity();
   }
 
   void reset() {
@@ -128,13 +127,26 @@ class WorkoutController extends Notifier<WorkoutState> {
     if (snapshot.isComplete) {
       _teardown();
       state = state.copyWith(
-          status: WorkoutStatus.completed, snapshot: snapshot);
+        status: WorkoutStatus.completed,
+        snapshot: snapshot,
+      );
       return;
     }
+    state = state.copyWith(snapshot: snapshot);
     if (snapshot.phase != previous.phase || snapshot.round != previous.round) {
       unawaited(ref.read(backgroundKeeperProvider).update(snapshot));
+      _showLiveActivity();
     }
-    state = state.copyWith(snapshot: snapshot);
+  }
+
+  void _showLiveActivity() {
+    final snapshot = state.snapshot;
+    final endsAt = state.status == WorkoutStatus.running
+        ? ref.read(clockProvider).wall.add(snapshot.remaining)
+        : null;
+    unawaited(
+      ref.read(liveActivityServiceProvider).show(snapshot, phaseEndsAt: endsAt),
+    );
   }
 
   void _dispatch(List<WorkoutEvent> events, Duration now) {
@@ -144,8 +156,8 @@ class WorkoutController extends Notifier<WorkoutState> {
       switch (event) {
         case CountdownTick() when age <= tickGrace:
           _cue((h) => h.countdownTick(), (s) => s.countdownTick());
-        case PhaseSwitch() when identical(event, latestSwitch) &&
-              age <= switchGrace:
+        case PhaseSwitch()
+            when identical(event, latestSwitch) && age <= switchGrace:
           _cue((h) => h.phaseSwitch(), (s) => s.phaseSwitch());
         case WorkoutComplete():
           _cue((h) => h.workoutComplete(), (s) => s.workoutComplete());
@@ -168,38 +180,10 @@ class WorkoutController extends Notifier<WorkoutState> {
     }
   }
 
-  void _scheduleNotifications() {
-    final elapsed = _elapsed();
-    final horizon = elapsed +
-        state.config.cycleDuration * (NotificationScheduler.maxPending ~/ 2 + 1);
-    final wallNow = ref.read(clockProvider).wall;
-    final totalRounds = state.config.rounds;
-
-    final cues = _engine
-        .eventsBetween(elapsed, horizon)
-        .where((e) => e is! CountdownTick)
-        .take(NotificationScheduler.maxPending)
-        .map((e) => ScheduledCue(
-              at: wallNow.add(e.at - elapsed),
-              title: switch (e) {
-                PhaseSwitch(:final to) => to.label,
-                _ => 'Workout complete',
-              },
-              body: switch (e) {
-                PhaseSwitch(:final round) => totalRounds == null
-                    ? 'Round $round'
-                    : 'Round $round / $totalRounds',
-                _ => 'Great job — all rounds done!',
-              },
-            ))
-        .toList();
-    unawaited(ref.read(notificationSchedulerProvider).schedule(cues));
-  }
-
   void _teardown() {
     _stopTicker();
-    unawaited(ref.read(notificationSchedulerProvider).cancelAll());
     unawaited(ref.read(backgroundKeeperProvider).stop());
+    unawaited(ref.read(liveActivityServiceProvider).end());
     unawaited(ref.read(wakeLockServiceProvider).disable());
   }
 

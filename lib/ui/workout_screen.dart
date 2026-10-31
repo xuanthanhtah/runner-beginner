@@ -54,12 +54,11 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
     final nextPhase = snapshot.phase == IntervalPhase.run
         ? IntervalPhase.walk
         : IntervalPhase.run;
-    final nextDuration = nextPhase == IntervalPhase.run
-        ? state.config.runDuration
-        : state.config.walkDuration;
-    final isLastInterval = snapshot.totalRounds != null &&
+    final nextDuration = state.config.durationOf(nextPhase);
+    final isLastInterval =
+        snapshot.totalRounds != null &&
         snapshot.round == snapshot.totalRounds &&
-        snapshot.phase == IntervalPhase.walk;
+        snapshot.phase == state.config.secondPhase;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -71,33 +70,35 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             child: Column(
               children: [
-                Row(children: [
-                  Text(
-                    state.status == WorkoutStatus.paused
-                        ? 'PAUSED'
-                        : 'RUN / WALK',
-                    style: TextStyle(
-                      color: palette.foreground,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 3,
+                Row(
+                  children: [
+                    Text(
+                      state.status == WorkoutStatus.paused
+                          ? 'PAUSED'
+                          : 'RUN / WALK',
+                      style: TextStyle(
+                        color: palette.foreground,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Workout settings',
-                    iconSize: 30,
-                    color: palette.foreground,
-                    onPressed: state.isActive
-                        ? null
-                        : () => SettingsSheet.show(
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Workout settings',
+                      iconSize: 30,
+                      color: palette.foreground,
+                      onPressed: state.isActive
+                          ? null
+                          : () => SettingsSheet.show(
                               context,
                               initial: state.config,
                               onSave: controller.updateConfig,
                             ),
-                    icon: const Icon(Icons.tune_rounded),
-                  ),
-                ]),
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                  ],
+                ),
                 Expanded(
                   child: Semantics(
                     container: true,
@@ -117,33 +118,35 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        LayoutBuilder(builder: (context, constraints) {
-                          final size = math.min(
-                            math.min(constraints.maxWidth, 360.0),
-                            MediaQuery.sizeOf(context).height * 0.42,
-                          );
-                          return SizedBox.square(
-                            dimension: size,
-                            child: TimerRing(
-                              progress: snapshot.progress,
-                              color: palette.accent,
-                              child: FittedBox(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Text(
-                                    countdown,
-                                    style: TextStyle(
-                                      color: palette.foreground,
-                                      fontSize: 96,
-                                      fontWeight: FontWeight.w800,
-                                      fontFeatures: tabularFigures,
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final size = math.min(
+                              math.min(constraints.maxWidth, 360.0),
+                              MediaQuery.sizeOf(context).height * 0.42,
+                            );
+                            return SizedBox.square(
+                              dimension: size,
+                              child: TimerRing(
+                                progress: snapshot.progress,
+                                color: palette.accent,
+                                child: FittedBox(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(32),
+                                    child: Text(
+                                      countdown,
+                                      style: TextStyle(
+                                        color: palette.foreground,
+                                        fontSize: 96,
+                                        fontWeight: FontWeight.w800,
+                                        fontFeatures: tabularFigures,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        }),
+                            );
+                          },
+                        ),
                         const SizedBox(height: 20),
                         Text(
                           roundText,
@@ -160,7 +163,7 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
                             isLastInterval
                                 ? 'Last interval'
                                 : 'Next · ${nextPhase.label} '
-                                    '${formatCountdown(nextDuration)}',
+                                      '${formatCountdown(nextDuration)}',
                             style: TextStyle(
                               color: palette.foreground.withValues(alpha: 0.8),
                               fontSize: 18,

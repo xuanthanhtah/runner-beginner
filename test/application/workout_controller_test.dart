@@ -11,7 +11,7 @@ import 'package:run_walk_timer/domain/interval_phase.dart';
 import 'package:run_walk_timer/domain/workout_config.dart';
 import 'package:run_walk_timer/services/background_keeper.dart';
 import 'package:run_walk_timer/services/haptic_service.dart';
-import 'package:run_walk_timer/services/notification_scheduler.dart';
+import 'package:run_walk_timer/services/live_activity_service.dart';
 import 'package:run_walk_timer/services/settings_repository.dart';
 import 'package:run_walk_timer/services/sound_service.dart';
 import 'package:run_walk_timer/services/wake_lock_service.dart';
@@ -22,9 +22,9 @@ class MockSound extends Mock implements SoundService {}
 
 class MockBackground extends Mock implements BackgroundKeeper {}
 
-class MockNotifications extends Mock implements NotificationScheduler {}
-
 class MockWakeLock extends Mock implements WakeLockService {}
+
+class MockLiveActivity extends Mock implements LiveActivityService {}
 
 class FakeClock implements Clock {
   Duration _now = Duration.zero;
@@ -68,17 +68,17 @@ Duration s(num seconds) => Duration(microseconds: (seconds * 1e6).round());
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(<ScheduledCue>[]);
-    registerFallbackValue(const IntervalEngine(WorkoutConfig.defaults)
-        .snapshotAt(Duration.zero));
+    registerFallbackValue(
+      const IntervalEngine(WorkoutConfig.defaults).snapshotAt(Duration.zero),
+    );
   });
 
   late FakeClock clock;
   late MockHaptics haptics;
   late MockSound sound;
   late MockBackground background;
-  late MockNotifications notifications;
   late MockWakeLock wakeLock;
+  late MockLiveActivity liveActivity;
   late InMemorySettings settings;
   late List<FakeTimer> timers;
   late ProviderContainer container;
@@ -110,8 +110,8 @@ void main() {
     haptics = MockHaptics();
     sound = MockSound();
     background = MockBackground();
-    notifications = MockNotifications();
     wakeLock = MockWakeLock();
+    liveActivity = MockLiveActivity();
     settings = InMemorySettings(config);
     timers = [];
 
@@ -123,30 +123,33 @@ void main() {
       sound.phaseSwitch,
       sound.workoutComplete,
       background.stop,
-      notifications.cancelAll,
       wakeLock.disable,
       wakeLock.enable,
+      liveActivity.end,
     ]) {
       when(f).thenAnswer((_) async {});
     }
     when(() => background.start(any())).thenAnswer((_) async {});
     when(() => background.update(any())).thenAnswer((_) async {});
-    when(() => notifications.schedule(any())).thenAnswer((_) async {});
+    when(() => liveActivity.show(any(), phaseEndsAt: any(named: 'phaseEndsAt')))
+        .thenAnswer((_) async {});
 
-    container = ProviderContainer.test(overrides: [
-      clockProvider.overrideWithValue(clock),
-      hapticServiceProvider.overrideWithValue(haptics),
-      soundServiceProvider.overrideWithValue(sound),
-      backgroundKeeperProvider.overrideWithValue(background),
-      notificationSchedulerProvider.overrideWithValue(notifications),
-      wakeLockServiceProvider.overrideWithValue(wakeLock),
-      settingsRepositoryProvider.overrideWithValue(settings),
-      periodicSchedulerProvider.overrideWithValue((interval, callback) {
-        final t = FakeTimer();
-        timers.add(t);
-        return t;
-      }),
-    ]);
+    container = ProviderContainer.test(
+      overrides: [
+        clockProvider.overrideWithValue(clock),
+        hapticServiceProvider.overrideWithValue(haptics),
+        soundServiceProvider.overrideWithValue(sound),
+        backgroundKeeperProvider.overrideWithValue(background),
+        wakeLockServiceProvider.overrideWithValue(wakeLock),
+        liveActivityServiceProvider.overrideWithValue(liveActivity),
+        settingsRepositoryProvider.overrideWithValue(settings),
+        periodicSchedulerProvider.overrideWithValue((interval, callback) {
+          final t = FakeTimer();
+          timers.add(t);
+          return t;
+        }),
+      ],
+    );
   });
 
   group('lifecycle', () {
@@ -156,15 +159,16 @@ void main() {
       expect(state().snapshot.remaining, s(10));
     });
 
-    test('start → running, starts ticker, background service and wake lock',
-        () {
-      controller().start();
-      expect(state().status, WorkoutStatus.running);
-      expect(timers, hasLength(1));
-      verify(() => background.start(any())).called(1);
-      verify(wakeLock.enable).called(1);
-      verify(() => notifications.schedule(any())).called(1);
-    });
+    test(
+      'start → running, starts ticker, background service and wake lock',
+      () {
+        controller().start();
+        expect(state().status, WorkoutStatus.running);
+        expect(timers, hasLength(1));
+        verify(() => background.start(any())).called(1);
+        verify(wakeLock.enable).called(1);
+      },
+    );
 
     test('does not enable wake lock when keepScreenOn is off', () {
       settings.config = config.copyWith(keepScreenOn: false);
@@ -186,7 +190,6 @@ void main() {
       controller().pause();
       expect(state().status, WorkoutStatus.paused);
       expect(timers.single.cancelled, isTrue);
-      verify(notifications.cancelAll).called(1);
 
       clock.advance(s(60)); // time passes while paused
       controller().tick();
@@ -211,7 +214,6 @@ void main() {
       expect(timers.last.cancelled, isTrue);
       verify(background.stop).called(1);
       verify(wakeLock.disable).called(1);
-      verify(notifications.cancelAll).called(greaterThanOrEqualTo(1));
     });
 
     test('completes after the final WALK and stops the ticker', () {
@@ -289,8 +291,10 @@ void main() {
     });
 
     test('toggles suppress haptics and sound independently', () {
-      settings.config =
-          config.copyWith(vibrationEnabled: false, soundEnabled: false);
+      settings.config = config.copyWith(
+        vibrationEnabled: false,
+        soundEnabled: false,
+      );
       container.invalidate(workoutControllerProvider);
       controller().start();
       runFor(s(30));
@@ -302,16 +306,18 @@ void main() {
   });
 
   group('background catch-up', () {
-    test('drops stale countdown ticks after a long gap but keeps the switch',
-        () {
-      controller().start();
-      runFor(s(6));
-      clock.advance(s(4.7)); // suspended through T-3..T-0, resumes at 10.7
-      controller().onAppResumed();
-      verifyNever(haptics.countdownTick);
-      verify(haptics.phaseSwitch).called(1);
-      expect(state().snapshot.phase, IntervalPhase.walk);
-    });
+    test(
+      'drops stale countdown ticks after a long gap but keeps the switch',
+      () {
+        controller().start();
+        runFor(s(6));
+        clock.advance(s(4.7)); // suspended through T-3..T-0, resumes at 10.7
+        controller().onAppResumed();
+        verifyNever(haptics.countdownTick);
+        verify(haptics.phaseSwitch).called(1);
+        expect(state().snapshot.phase, IntervalPhase.walk);
+      },
+    );
 
     test('collapses multiple missed switches into the latest one', () {
       controller().start();
@@ -338,45 +344,58 @@ void main() {
     });
   });
 
-  group('notification fallback', () {
-    test('schedules upcoming switches and completion with wall-clock times',
-        () {
+  group('live activity', () {
+    DateTime? lastEndsAt() =>
+        verify(
+              () => liveActivity.show(
+                any(),
+                phaseEndsAt: captureAny(named: 'phaseEndsAt'),
+              ),
+            ).captured.last
+            as DateTime?;
+
+    test('start shows the interval ending at its wall-clock time', () {
       controller().start();
-      final cues = verify(() => notifications.schedule(captureAny()))
-          .captured
-          .single as List<ScheduledCue>;
-      expect(cues.map((c) => c.at).toList(), [
-        clock.wall.add(s(10)),
-        clock.wall.add(s(15)),
-        clock.wall.add(s(25)),
-        clock.wall.add(s(30)),
-      ]);
-      expect(cues.first.title, 'WALK');
-      expect(cues.last.title, 'Workout complete');
+      expect(lastEndsAt(), clock.wall.add(s(10)));
     });
 
-    test('caps scheduled notifications in infinite mode', () {
-      settings.config = config.copyWith(rounds: () => null);
-      container.invalidate(workoutControllerProvider);
+    test('updates on phase switch only, not on every tick', () {
       controller().start();
-      final cues = verify(() => notifications.schedule(captureAny()))
-          .captured
-          .single as List<ScheduledCue>;
-      expect(cues, hasLength(NotificationScheduler.maxPending));
+      runFor(s(9.9));
+      verify(
+        () => liveActivity.show(any(), phaseEndsAt: any(named: 'phaseEndsAt')),
+      ).called(1);
+      runFor(s(0.2));
+      final snapshot =
+          verify(
+                () => liveActivity.show(
+                  captureAny(),
+                  phaseEndsAt: any(named: 'phaseEndsAt'),
+                ),
+              ).captured.single
+              as WorkoutSnapshot;
+      expect(snapshot.phase, IntervalPhase.walk);
     });
 
-    test('reschedules from the paused position on resume', () {
+    test('pause shows no end time; resume restores it', () {
       controller().start();
-      runFor(s(12));
+      runFor(s(4));
       controller().pause();
-      clock.advance(s(100));
-      clearInteractions(notifications);
+      expect(lastEndsAt(), isNull);
+      clock.advance(s(60));
       controller().resume();
-      final cues = verify(() => notifications.schedule(captureAny()))
-          .captured
-          .single as List<ScheduledCue>;
-      // Elapsed is 12 → next switch at 15 is 3s from now.
-      expect(cues.first.at, clock.wall.add(s(3)));
+      expect(lastEndsAt(), clock.wall.add(s(6)));
+    });
+
+    test('ends on reset and on completion', () {
+      controller().start();
+      controller().reset();
+      verify(liveActivity.end).called(1);
+
+      controller().start();
+      runFor(s(31));
+      expect(state().status, WorkoutStatus.completed);
+      verify(liveActivity.end).called(1);
     });
   });
 }

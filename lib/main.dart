@@ -15,11 +15,14 @@ Future<void> main() async {
     cacheOptions: SharedPrefsSettingsRepository.cacheOptions,
   );
 
-  runApp(ProviderScope(
-    overrides: [
-      settingsRepositoryProvider
-          .overrideWithValue(SharedPrefsSettingsRepository(prefs)),
-    ],
-    child: const RunWalkApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(
+          SharedPrefsSettingsRepository(prefs),
+        ),
+      ],
+      child: const RunWalkApp(),
+    ),
+  );
 }

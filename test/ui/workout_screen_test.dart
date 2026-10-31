@@ -11,7 +11,6 @@ import 'package:run_walk_timer/domain/interval_engine.dart';
 import 'package:run_walk_timer/domain/workout_config.dart';
 import 'package:run_walk_timer/services/background_keeper.dart';
 import 'package:run_walk_timer/services/haptic_service.dart';
-import 'package:run_walk_timer/services/notification_scheduler.dart';
 import 'package:run_walk_timer/services/settings_repository.dart';
 import 'package:run_walk_timer/services/sound_service.dart';
 import 'package:run_walk_timer/services/wake_lock_service.dart';
@@ -42,13 +41,6 @@ class _Background implements BackgroundKeeper {
   Future<void> update(WorkoutSnapshot snapshot) async {}
   @override
   Future<void> stop() async {}
-}
-
-class _Notifications implements NotificationScheduler {
-  @override
-  Future<void> schedule(List<ScheduledCue> cues) async {}
-  @override
-  Future<void> cancelAll() async {}
 }
 
 class _WakeLock implements WakeLockService {
@@ -89,22 +81,25 @@ void main() {
     clock = _Clock();
     settings = _Settings();
     final silent = _Silent();
-    container = ProviderContainer(overrides: [
-      clockProvider.overrideWithValue(clock),
-      hapticServiceProvider.overrideWithValue(silent),
-      soundServiceProvider.overrideWithValue(silent),
-      backgroundKeeperProvider.overrideWithValue(_Background()),
-      notificationSchedulerProvider.overrideWithValue(_Notifications()),
-      wakeLockServiceProvider.overrideWithValue(_WakeLock()),
-      settingsRepositoryProvider.overrideWithValue(settings),
-      periodicSchedulerProvider.overrideWithValue((_, _) => _NeverTimer()),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        clockProvider.overrideWithValue(clock),
+        hapticServiceProvider.overrideWithValue(silent),
+        soundServiceProvider.overrideWithValue(silent),
+        backgroundKeeperProvider.overrideWithValue(_Background()),
+        wakeLockServiceProvider.overrideWithValue(_WakeLock()),
+        settingsRepositoryProvider.overrideWithValue(settings),
+        periodicSchedulerProvider.overrideWithValue((_, _) => _NeverTimer()),
+      ],
+    );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const RunWalkApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const RunWalkApp(),
+      ),
+    );
   }
 
   void advance(Duration d) {
@@ -112,8 +107,9 @@ void main() {
     container.read(workoutControllerProvider.notifier).tick();
   }
 
-  testWidgets('idle screen shows phase, full countdown and round tracker',
-      (tester) async {
+  testWidgets('idle screen shows phase, full countdown and round tracker', (
+    tester,
+  ) async {
     await pumpApp(tester);
     expect(find.text('RUN'), findsOneWidget);
     expect(find.text('01:00'), findsOneWidget);
@@ -121,8 +117,9 @@ void main() {
     expect(find.text('START'), findsOneWidget);
   });
 
-  testWidgets('start, pause, resume and stop drive the controller',
-      (tester) async {
+  testWidgets('start, pause, resume and stop drive the controller', (
+    tester,
+  ) async {
     await pumpApp(tester);
 
     await tester.tap(find.text('START'));
@@ -137,8 +134,10 @@ void main() {
     await tester.tap(find.text('PAUSE'));
     await tester.pump();
     expect(find.text('RESUME'), findsOneWidget);
-    expect(container.read(workoutControllerProvider).status,
-        WorkoutStatus.paused);
+    expect(
+      container.read(workoutControllerProvider).status,
+      WorkoutStatus.paused,
+    );
 
     await tester.tap(find.text('RESUME'));
     await tester.pump();
@@ -159,8 +158,7 @@ void main() {
     expect(find.text('00:59'), findsOneWidget);
   });
 
-  testWidgets('settings are locked while a workout is running',
-      (tester) async {
+  testWidgets('settings are locked while a workout is running', (tester) async {
     await pumpApp(tester);
     final settingsButton = find.widgetWithIcon(IconButton, Icons.tune_rounded);
     expect(tester.widget<IconButton>(settingsButton).onPressed, isNotNull);
@@ -170,8 +168,9 @@ void main() {
     expect(tester.widget<IconButton>(settingsButton).onPressed, isNull);
   });
 
-  testWidgets('settings sheet edits durations, rounds and toggles',
-      (tester) async {
+  testWidgets('settings sheet edits durations, rounds and toggles', (
+    tester,
+  ) async {
     await pumpApp(tester);
     await tester.tap(find.byTooltip('Workout settings'));
     await tester.pumpAndSettle();
@@ -182,9 +181,12 @@ void main() {
     // Walk 1:00 → 0:45.
     await tester.tap(find.byTooltip('Decrease walk'));
     await tester.tap(find.byKey(const Key('infinite-switch')));
+    await tester.tap(find.byKey(const Key('start-with-walk-switch')));
+    await tester.ensureVisible(find.byKey(const Key('sound-switch')));
     await tester.tap(find.byKey(const Key('sound-switch')));
     await tester.pump();
 
+    await tester.ensureVisible(find.text('SAVE'));
     await tester.tap(find.text('SAVE'));
     await tester.pumpAndSettle();
 
@@ -193,9 +195,11 @@ void main() {
     expect(config.walkDuration, const Duration(seconds: 45));
     expect(config.rounds, isNull);
     expect(config.soundEnabled, isFalse);
+    expect(config.startWithWalk, isTrue);
     expect(settings.config, config);
 
-    expect(find.text('01:30'), findsOneWidget);
+    // Walk now comes first.
+    expect(find.text('00:45'), findsOneWidget);
     expect(find.text('Round 1 · ∞'), findsOneWidget);
   });
 

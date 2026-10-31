@@ -44,6 +44,7 @@ class _SettingsSheetState extends State<SettingsSheet> {
   late bool _sound = widget.initial.soundEnabled;
   late bool _vibration = widget.initial.vibrationEnabled;
   late bool _keepScreenOn = widget.initial.keepScreenOn;
+  late bool _startWithWalk = widget.initial.startWithWalk;
 
   /// 5 s steps for short intervals, 15 s steps above 30 s.
   static Duration _step(Duration d, {required bool up}) {
@@ -53,14 +54,17 @@ class _SettingsSheetState extends State<SettingsSheet> {
   }
 
   void _save() {
-    widget.onSave(WorkoutConfig(
-      runDuration: _run,
-      walkDuration: _walk,
-      rounds: _infinite ? null : _rounds,
-      soundEnabled: _sound,
-      vibrationEnabled: _vibration,
-      keepScreenOn: _keepScreenOn,
-    ));
+    widget.onSave(
+      WorkoutConfig(
+        runDuration: _run,
+        walkDuration: _walk,
+        rounds: _infinite ? null : _rounds,
+        soundEnabled: _sound,
+        vibrationEnabled: _vibration,
+        keepScreenOn: _keepScreenOn,
+        startWithWalk: _startWithWalk,
+      ),
+    );
     Navigator.of(context).pop();
   }
 
@@ -74,22 +78,29 @@ class _SettingsSheetState extends State<SettingsSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(children: [
-              Expanded(
-                child: Text('Workout settings',
-                    style: textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(96, 48),
-                  textStyle: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w800),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Workout settings',
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-                onPressed: _save,
-                child: const Text('SAVE'),
-              ),
-            ]),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(96, 48),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  onPressed: _save,
+                  child: const Text('SAVE'),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Text('Quick presets (run / walk)', style: textTheme.labelLarge),
             const SizedBox(height: 8),
@@ -149,6 +160,21 @@ class _SettingsSheetState extends State<SettingsSheet> {
               value: _infinite,
               onChanged: (v) => setState(() => _infinite = v),
             ),
+            SwitchListTile(
+              key: const Key('start-with-walk-switch'),
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(
+                _startWithWalk ? Icons.directions_walk : Icons.directions_run,
+              ),
+              title: const Text('Start with walk'),
+              subtitle: Text(
+                _startWithWalk
+                    ? 'Each round: walk → run'
+                    : 'Each round: run → walk',
+              ),
+              value: _startWithWalk,
+              onChanged: (v) => setState(() => _startWithWalk = v),
+            ),
             const Divider(),
             SwitchListTile(
               key: const Key('vibration-switch'),
@@ -201,45 +227,49 @@ class _StepperRow extends StatelessWidget {
     final lower = label.toLowerCase();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(children: [
-        Container(
-          width: 6,
-          height: 40,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(label,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-        ),
-        IconButton.filledTonal(
-          tooltip: 'Decrease $lower',
-          iconSize: 28,
-          onPressed: onDecrease,
-          icon: const Icon(Icons.remove),
-        ),
-        SizedBox(
-          width: 88,
-          child: Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              fontFeatures: tabularFigures,
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
-        ),
-        IconButton.filledTonal(
-          tooltip: 'Increase $lower',
-          iconSize: 28,
-          onPressed: onIncrease,
-          icon: const Icon(Icons.add),
-        ),
-      ]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Decrease $lower',
+            iconSize: 28,
+            onPressed: onDecrease,
+            icon: const Icon(Icons.remove),
+          ),
+          SizedBox(
+            width: 88,
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                fontFeatures: tabularFigures,
+              ),
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Increase $lower',
+            iconSize: 28,
+            onPressed: onIncrease,
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
     );
   }
 }

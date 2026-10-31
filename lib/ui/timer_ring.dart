@@ -44,7 +44,8 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset(strokeWidth / 2, strokeWidth / 2) &
+    final rect =
+        Offset(strokeWidth / 2, strokeWidth / 2) &
         Size(size.width - strokeWidth, size.height - strokeWidth);
 
     final track = Paint()

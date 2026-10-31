@@ -43,29 +43,32 @@ class IntervalEngine {
     final total = config.totalDuration;
     if (total != null && elapsed >= total) {
       return WorkoutSnapshot(
-        phase: IntervalPhase.walk,
+        phase: config.secondPhase,
         round: config.rounds!,
         totalRounds: config.rounds,
         remaining: Duration.zero,
-        intervalDuration: config.walkDuration,
+        intervalDuration: config.durationOf(config.secondPhase),
         isComplete: true,
       );
     }
 
     final cycleUs = config.cycleDuration.inMicroseconds;
     final cycleIndex = elapsed.inMicroseconds ~/ cycleUs;
-    final offset =
-        Duration(microseconds: elapsed.inMicroseconds - cycleIndex * cycleUs);
-    final inRun = offset < config.runDuration;
+    final offset = Duration(
+      microseconds: elapsed.inMicroseconds - cycleIndex * cycleUs,
+    );
+    final firstDuration = config.durationOf(config.firstPhase);
+    final inFirst = offset < firstDuration;
+    final phase = inFirst ? config.firstPhase : config.secondPhase;
 
     return WorkoutSnapshot(
-      phase: inRun ? IntervalPhase.run : IntervalPhase.walk,
+      phase: phase,
       round: cycleIndex + 1,
       totalRounds: config.rounds,
-      remaining: inRun
-          ? config.runDuration - offset
+      remaining: inFirst
+          ? firstDuration - offset
           : config.cycleDuration - offset,
-      intervalDuration: inRun ? config.runDuration : config.walkDuration,
+      intervalDuration: config.durationOf(phase),
       isComplete: false,
     );
   }
@@ -87,7 +90,7 @@ class IntervalEngine {
       final start = _intervalStart(index);
       if (start > to) break;
 
-      final length = index.isEven ? config.runDuration : config.walkDuration;
+      final length = config.durationOf(_phaseOf(index));
       final end = start + length;
 
       for (var n = countdownSeconds; n >= 1; n--) {
@@ -100,13 +103,11 @@ class IntervalEngine {
 
       if (end > from && end <= to) {
         final isLast = total != null && end >= total;
-        events.add(isLast
-            ? WorkoutComplete(end)
-            : PhaseSwitch(
-                end,
-                index.isEven ? IntervalPhase.walk : IntervalPhase.run,
-                (index + 1) ~/ 2 + 1,
-              ));
+        events.add(
+          isLast
+              ? WorkoutComplete(end)
+              : PhaseSwitch(end, _phaseOf(index + 1), (index + 1) ~/ 2 + 1),
+        );
       }
 
       index++;
@@ -120,10 +121,15 @@ class IntervalEngine {
     final cycleIndex = elapsed.inMicroseconds ~/ cycleUs;
     final offsetUs = elapsed.inMicroseconds - cycleIndex * cycleUs;
     return cycleIndex * 2 +
-        (offsetUs < config.runDuration.inMicroseconds ? 0 : 1);
+        (offsetUs < config.durationOf(config.firstPhase).inMicroseconds
+            ? 0
+            : 1);
   }
+
+  IntervalPhase _phaseOf(int index) =>
+      index.isEven ? config.firstPhase : config.secondPhase;
 
   Duration _intervalStart(int index) =>
       config.cycleDuration * (index ~/ 2) +
-      (index.isOdd ? config.runDuration : Duration.zero);
+      (index.isOdd ? config.durationOf(config.firstPhase) : Duration.zero);
 }

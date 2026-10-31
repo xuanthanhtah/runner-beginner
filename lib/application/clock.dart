@@ -2,7 +2,7 @@
 ///
 /// [monotonic] drives all interval maths: it never jumps when the user or
 /// network changes the system time. [wall] is only used to translate future
-/// events into OS notification times.
+/// events into wall-clock times (e.g. the Live Activity countdown).
 abstract interface class Clock {
   Duration get monotonic;
   DateTime get wall;

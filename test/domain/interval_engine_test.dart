@@ -8,15 +8,15 @@ Duration s(num seconds) => Duration(microseconds: (seconds * 1e6).round());
 
 /// Renders events as compact strings so whole timelines can be compared.
 List<String> describe(List<WorkoutEvent> events) => [
-      for (final e in events)
-        switch (e) {
-          CountdownTick(:final at, :final secondsLeft) =>
-            'tick$secondsLeft@${at.inMilliseconds / 1000}',
-          PhaseSwitch(:final at, :final to, :final round) =>
-            '${to.name}$round@${at.inMilliseconds / 1000}',
-          WorkoutComplete(:final at) => 'done@${at.inMilliseconds / 1000}',
-        },
-    ];
+  for (final e in events)
+    switch (e) {
+      CountdownTick(:final at, :final secondsLeft) =>
+        'tick$secondsLeft@${at.inMilliseconds / 1000}',
+      PhaseSwitch(:final at, :final to, :final round) =>
+        '${to.name}$round@${at.inMilliseconds / 1000}',
+      WorkoutComplete(:final at) => 'done@${at.inMilliseconds / 1000}',
+    },
+];
 
 void main() {
   // run 10s / walk 5s / 2 rounds → total 30s.
@@ -72,11 +72,13 @@ void main() {
     });
 
     test('infinite mode never completes and keeps counting rounds', () {
-      const infinite = IntervalEngine(WorkoutConfig(
-        runDuration: Duration(seconds: 10),
-        walkDuration: Duration(seconds: 5),
-        rounds: null,
-      ));
+      const infinite = IntervalEngine(
+        WorkoutConfig(
+          runDuration: Duration(seconds: 10),
+          walkDuration: Duration(seconds: 5),
+          rounds: null,
+        ),
+      );
       final snap = infinite.snapshotAt(s(15 * 100 + 2));
       expect(snap.isComplete, isFalse);
       expect(snap.round, 101);
@@ -90,15 +92,17 @@ void main() {
   });
 
   group('eventsBetween', () {
-    test('fires T-3, T-2, T-1 ticks then a switch at T-0 for every interval',
-        () {
-      expect(describe(engine.eventsBetween(Duration.zero, s(30))), [
-        'tick3@7.0', 'tick2@8.0', 'tick1@9.0', 'walk1@10.0', //
-        'tick3@12.0', 'tick2@13.0', 'tick1@14.0', 'run2@15.0',
-        'tick3@22.0', 'tick2@23.0', 'tick1@24.0', 'walk2@25.0',
-        'tick3@27.0', 'tick2@28.0', 'tick1@29.0', 'done@30.0',
-      ]);
-    });
+    test(
+      'fires T-3, T-2, T-1 ticks then a switch at T-0 for every interval',
+      () {
+        expect(describe(engine.eventsBetween(Duration.zero, s(30))), [
+          'tick3@7.0', 'tick2@8.0', 'tick1@9.0', 'walk1@10.0', //
+          'tick3@12.0', 'tick2@13.0', 'tick1@14.0', 'run2@15.0',
+          'tick3@22.0', 'tick2@23.0', 'tick1@24.0', 'walk2@25.0',
+          'tick3@27.0', 'tick2@28.0', 'tick1@29.0', 'done@30.0',
+        ]);
+      },
+    );
 
     test('last interval ends with WorkoutComplete instead of PhaseSwitch', () {
       final last = engine.eventsBetween(s(29.5), s(30));
@@ -128,7 +132,10 @@ void main() {
         all.addAll(engine.eventsBetween(prev, now));
         prev = now;
       }
-      expect(describe(all), describe(engine.eventsBetween(Duration.zero, s(31))));
+      expect(
+        describe(all),
+        describe(engine.eventsBetween(Duration.zero, s(31))),
+      );
     });
 
     test('a single large jump returns all crossed events in order', () {
@@ -151,11 +158,13 @@ void main() {
     });
 
     test('short intervals only emit ticks that fit inside the interval', () {
-      const short = IntervalEngine(WorkoutConfig(
-        runDuration: Duration(seconds: 3),
-        walkDuration: Duration(seconds: 2),
-        rounds: 1,
-      ));
+      const short = IntervalEngine(
+        WorkoutConfig(
+          runDuration: Duration(seconds: 3),
+          walkDuration: Duration(seconds: 2),
+          rounds: 1,
+        ),
+      );
       expect(describe(short.eventsBetween(Duration.zero, s(5))), [
         'tick2@1.0', 'tick1@2.0', 'walk1@3.0', //
         'tick1@4.0', 'done@5.0',
@@ -163,17 +172,51 @@ void main() {
     });
 
     test('infinite mode keeps emitting switches and never completes', () {
-      const infinite = IntervalEngine(WorkoutConfig(
-        runDuration: Duration(seconds: 10),
-        walkDuration: Duration(seconds: 5),
-        rounds: null,
-      ));
+      const infinite = IntervalEngine(
+        WorkoutConfig(
+          runDuration: Duration(seconds: 10),
+          walkDuration: Duration(seconds: 5),
+          rounds: null,
+        ),
+      );
       final events = infinite.eventsBetween(Duration.zero, s(15 * 50));
       expect(events.whereType<WorkoutComplete>(), isEmpty);
       expect(events.whereType<PhaseSwitch>(), hasLength(100));
       final lastSwitch = events.whereType<PhaseSwitch>().last;
       expect(lastSwitch.to, IntervalPhase.run);
       expect(lastSwitch.round, 51);
+    });
+  });
+
+  group('start with walk', () {
+    const walkFirst = WorkoutConfig(
+      runDuration: Duration(seconds: 10),
+      walkDuration: Duration(seconds: 5),
+      rounds: 2,
+      startWithWalk: true,
+    );
+    const engine = IntervalEngine(walkFirst);
+
+    test('each round is WALK then RUN', () {
+      expect(engine.snapshotAt(Duration.zero).phase, IntervalPhase.walk);
+      expect(engine.snapshotAt(Duration.zero).remaining, s(5));
+      final snap = engine.snapshotAt(s(5));
+      expect(snap.phase, IntervalPhase.run);
+      expect(snap.remaining, s(10));
+      expect(engine.snapshotAt(s(15)).phase, IntervalPhase.walk);
+      expect(engine.snapshotAt(s(15)).round, 2);
+    });
+
+    test('switches and completion follow the walk-first order', () {
+      expect(describe(engine.eventsBetween(Duration.zero, s(30))), [
+        'tick3@2.0', 'tick2@3.0', 'tick1@4.0', 'run1@5.0', //
+        'tick3@12.0', 'tick2@13.0', 'tick1@14.0', 'walk2@15.0',
+        'tick3@17.0', 'tick2@18.0', 'tick1@19.0', 'run2@20.0',
+        'tick3@27.0', 'tick2@28.0', 'tick1@29.0', 'done@30.0',
+      ]);
+      final done = engine.snapshotAt(s(30));
+      expect(done.isComplete, isTrue);
+      expect(done.phase, IntervalPhase.run);
     });
   });
 
@@ -186,6 +229,7 @@ void main() {
         soundEnabled: false,
         vibrationEnabled: true,
         keepScreenOn: false,
+        startWithWalk: true,
       );
       expect(WorkoutConfig.fromJson(cfg.toJson()), cfg);
     });

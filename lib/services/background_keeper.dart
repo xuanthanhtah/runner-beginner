@@ -142,9 +142,10 @@ class IosAudioSessionKeeper implements BackgroundKeeper {
   Future<void> start(WorkoutSnapshot snapshot) async {
     try {
       final player = _player ??= AudioPlayer();
-      await player.setAudioContext(AudioContextConfig(
-        focus: AudioContextConfigFocus.mixWithOthers,
-      ).build());
+      await player.setAudioContext(
+        AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers)
+            .build(),
+      );
       await player.setReleaseMode(ReleaseMode.loop);
       await player.play(AssetSource('sounds/silence.wav'));
     } catch (e) {

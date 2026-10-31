@@ -14,8 +14,9 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   SharedPrefsSettingsRepository(this._prefs);
 
   static const key = 'workout_config';
-  static const cacheOptions =
-      SharedPreferencesWithCacheOptions(allowList: {key});
+  static const cacheOptions = SharedPreferencesWithCacheOptions(
+    allowList: {key},
+  );
 
   final SharedPreferencesWithCache _prefs;
 

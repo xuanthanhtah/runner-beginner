@@ -34,25 +34,25 @@ class PhasePalette {
         : AppColors.walk;
     return switch (state.status) {
       WorkoutStatus.idle => PhasePalette(
-          background: AppColors.idleBackground,
-          foreground: AppColors.paper,
-          accent: phaseColor,
-        ),
+        background: AppColors.idleBackground,
+        foreground: AppColors.paper,
+        accent: phaseColor,
+      ),
       WorkoutStatus.running => PhasePalette(
-          background: phaseColor,
-          foreground: AppColors.ink,
-          accent: AppColors.ink,
-        ),
+        background: phaseColor,
+        foreground: AppColors.ink,
+        accent: AppColors.ink,
+      ),
       WorkoutStatus.paused => PhasePalette(
-          background: Color.lerp(phaseColor, AppColors.idleBackground, 0.55)!,
-          foreground: AppColors.paper,
-          accent: phaseColor,
-        ),
+        background: Color.lerp(phaseColor, AppColors.idleBackground, 0.55)!,
+        foreground: AppColors.paper,
+        accent: phaseColor,
+      ),
       WorkoutStatus.completed => const PhasePalette(
-          background: AppColors.done,
-          foreground: AppColors.ink,
-          accent: AppColors.ink,
-        ),
+        background: AppColors.done,
+        foreground: AppColors.ink,
+        accent: AppColors.ink,
+      ),
     };
   }
 }
@@ -87,7 +87,7 @@ ThemeData buildTheme() {
 String formatCountdown(Duration remaining) {
   final totalSeconds =
       (remaining.inMicroseconds + Duration.microsecondsPerSecond - 1) ~/
-          Duration.microsecondsPerSecond;
+      Duration.microsecondsPerSecond;
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   return '${minutes.toString().padLeft(2, '0')}:'
